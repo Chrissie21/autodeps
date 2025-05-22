@@ -4,17 +4,22 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/Chrissie21/autodeps/internal/core"
 	"github.com/spf13/cobra"
 )
 
+var scan bool
+
 var rootCmd = &cobra.Command{
 	Use:   "autodeps",
-	Short: "Auto-install dependencies in common project types (Python, Node.js, Go)",
+	Short: "Auto-install project dependencies",
+	Long:  `Scan and install dependencies for Python, Node, and Go projects.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		dir, _ := os.Getwd()
-		fmt.Println("🔍 Scanning:", dir)
-		core.ScanAndInstall(dir)
+		if scan {
+			fmt.Println("🔍 Scanning for project files...")
+			scanAndInstallDependencies()
+		} else {
+			fmt.Println("ℹ️ Use --help to explore available flags.")
+		}
 	},
 }
 
@@ -23,4 +28,8 @@ func Execute() {
 		fmt.Println("❌ Error:", err)
 		os.Exit(1)
 	}
+}
+
+func init() {
+	rootCmd.PersistentFlags().BoolVarP(&scan, "scan", "s", false, "Scan project directories for dependencies")
 }
