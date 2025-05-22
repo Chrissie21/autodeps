@@ -8,58 +8,67 @@ import (
 )
 
 func scanAndInstallDependencies() {
-	files := map[string]func(string){
-		"requirements.txt": installPythonDeps,
-		"package.json":     installNodeDeps,
-		"go.mod":           installGoDeps,
+	patterns := map[string]func(string){
+		"go.mod": func(dir string) {
+			fmt.Println("🐹 Downloading Go deps in", dir)
+			cmd := exec.Command("go", "mod", "download")
+			cmd.Dir = dir
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err := cmd.Run()
+			if err != nil {
+				fmt.Println("❌ Go deps failed in", dir, ":", err)
+			}
+		},
+		"package.json": func(dir string) {
+			fmt.Println("📦 Installing NPM packages in", dir)
+			cmd := exec.Command("npm", "install")
+			cmd.Dir = dir
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err := cmd.Run()
+			if err != nil {
+				fmt.Println("❌ NPM install failed in", dir, ":", err)
+			}
+		},
+		"requirements.txt": func(dir string) {
+			fmt.Println("🐍 Installing Python packages in", dir)
+			cmd := exec.Command("pip", "install", "-r", "requirements.txt")
+			cmd.Dir = dir
+			cmd.Stdout = os.Stdout
+			cmd.Stderr = os.Stderr
+			err := cmd.Run()
+			if err != nil {
+				fmt.Println("❌ Python install failed in", dir, ":", err)
+			}
+		},
 	}
 
-	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
+	root, err := os.Getwd()
+	if err != nil {
+		fmt.Println("❌ Error getting current dir:", err)
+		return
+	}
+
+	err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return err
+			fmt.Println("⚠️ Walk error:", err)
+			return nil
 		}
 
 		if !info.IsDir() {
-			if handler, ok := files[filepath.Base(path)]; ok {
-				fmt.Printf("📁 Found: %s\n", path)
-				handler(filepath.Dir(path))
+			for filename, handler := range patterns {
+				if filepath.Base(path) == filename {
+					dir := filepath.Dir(path) // ✅ FIXED: get the correct directory
+					fmt.Println("📁 Found:", filename)
+					handler(dir)
+				}
 			}
 		}
 		return nil
 	})
 
 	if err != nil {
-		fmt.Printf("❌ Scan error: %v\n", err)
+		fmt.Println("❌ Walk failed:", err)
 	}
-}
-
-func installPythonDeps(dir string) {
-	fmt.Printf("🐍 Installing Python deps in %s...\n", dir)
-	cmd := exec.Command("pip", "install", "-r", "requirements.txt")
-	cmd.Dir = dir
-	output, err := cmd.CombinedOutput()
-	printCmdResult(output, err)
-}
-
-func installNodeDeps(dir string) {
-	fmt.Printf("🟦 Installing Node deps in %s...\n", dir)
-	cmd := exec.Command("npm", "install")
-	cmd.Dir = dir
-	output, err := cmd.CombinedOutput()
-	printCmdResult(output, err)
-}
-
-func installGoDeps(dir string) {
-	fmt.Printf("🐹 Downloading Go deps in %s...\n", dir)
-	cmd := exec.Command("go", "mod", "download")
-	cmd.Dir = dir
-	output, err := cmd.CombinedOutput()
-	printCmdResult(output, err)
-}
-
-func printCmdResult(output []byte, err error) {
-	if err != nil {
-		fmt.Printf("❌ Command failed: %v\n", err)
-	}
-	fmt.Println(string(output))
 }
