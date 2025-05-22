@@ -59,6 +59,12 @@ var runners = map[string]struct {
 	"environment.yml":  {"Conda", []string{"conda", "env", "update", "--file", "environment.yml"}, "conda"},
 }
 
+type InstallSummary struct {
+	Successes []string
+	Failures  []string
+	Skipped   []string
+}
+
 func scanAndInstallDependencies(dryRun, verbose bool, only string) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -72,7 +78,8 @@ func scanAndInstallDependencies(dryRun, verbose bool, only string) {
 		}
 	}
 
-	visitedDirs := map[string]bool{} // Avoid duplicate installs per folder
+	visitedDirs := map[string]bool{}
+	summary := InstallSummary{}
 
 	err = filepath.Walk(cwd, func(path string, info os.FileInfo, err error) error {
 		if err != nil || info == nil {
@@ -82,77 +89,107 @@ func scanAndInstallDependencies(dryRun, verbose bool, only string) {
 		dir := filepath.Dir(path)
 		file := info.Name()
 
-		// Only run once per directory
 		if visitedDirs[dir] {
 			return nil
 		}
 
-		// Check for .venv + requirements.txt combo
+		// --- Python .venv + requirements.txt support ---
 		venvPath := filepath.Join(dir, ".venv")
 		reqsPath := filepath.Join(dir, "requirements.txt")
-		if _, venvExists := os.Stat(venvPath); !os.IsNotExist(venvExists) {
-			if _, reqExists := os.Stat(reqsPath); !os.IsNotExist(reqExists) {
-				if only == "" || filter["pip"] {
-					fmt.Printf("📁 Found: .venv and requirements.txt in %s\n", dir)
-					fmt.Println("🐍 Python (.venv) → Virtual Env Detected")
 
-					script := fmt.Sprintf("source %s/bin/activate && pip install -r requirements.txt", filepath.Join(dir, ".venv"))
-					fmt.Printf("   🔸 %s: %s\n\n",
-						map[bool]string{true: "Dry-run", false: "Executing"}[dryRun],
-						script)
+		venvExists := false
+		if stat, err := os.Stat(venvPath); err == nil && stat.IsDir() {
+			venvExists = true
+		}
 
-					if !dryRun {
-						cmd := exec.Command("bash", "-c", script)
-						cmd.Dir = dir
-						cmd.Stdout = os.Stdout
-						cmd.Stderr = os.Stderr
-						if err := cmd.Run(); err != nil {
-							fmt.Printf("❌ Error installing in .venv: %v\n", err)
+		if _, reqExists := os.Stat(reqsPath); reqExists == nil {
+			if only == "" || filter["pip"] {
+				fmt.Printf("📁 Found: requirements.txt in %s\n", dir)
+
+				if !venvExists {
+					fmt.Println("⚙️  .venv not found — creating it with `python3 -m venv .venv`")
+					createCmd := exec.Command("python3", "-m", "venv", ".venv")
+					createCmd.Dir = dir
+					createCmd.Stdout = os.Stdout
+					createCmd.Stderr = os.Stderr
+
+					if dryRun {
+						fmt.Printf("   🔸 Dry-run: python3 -m venv .venv\n")
+					} else {
+						if err := createCmd.Run(); err != nil {
+							msg := fmt.Sprintf("❌ Failed to create .venv in %s: %v", dir, err)
+							fmt.Println(msg)
+							summary.Failures = append(summary.Failures, msg)
+							return nil
 						}
 					}
-					visitedDirs[dir] = true
-					return nil
 				}
+
+				script := fmt.Sprintf("source .venv/bin/activate && pip install -r requirements.txt")
+
+				if verbose || dryRun {
+					fmt.Printf("   🔸 %s: %s\n", map[bool]string{true: "Dry-run", false: "Executing"}[dryRun], script)
+				}
+
+				if dryRun {
+					summary.Skipped = append(summary.Skipped, fmt.Sprintf("Dry-run: %s", dir))
+				} else {
+					cmd := exec.Command("bash", "-c", script)
+					cmd.Dir = dir
+					cmd.Stdout = os.Stdout
+					cmd.Stderr = os.Stderr
+
+					if err := cmd.Run(); err != nil {
+						msg := fmt.Sprintf("❌ Error installing Python deps in %s: %v", dir, err)
+						fmt.Println(msg)
+						summary.Failures = append(summary.Failures, msg)
+					} else {
+						summary.Successes = append(summary.Successes, fmt.Sprintf("✅ Python deps installed in %s", dir))
+					}
+				}
+				visitedDirs[dir] = true
+				return nil
 			}
 		}
 
-		// Default file-based runners
+		// --- General project file runners ---
 		if runner, ok := runners[file]; ok {
 			if only != "" && !filter[runner.Type] {
 				return nil
 			}
+
 			fmt.Printf("📁 Found: %s in %s\n", file, dir)
 			fmt.Printf("🔧 %s → %s\n", runner.Name, dir)
 
 			cmdPath, pathErr := exec.LookPath(runner.Command[0])
 			if pathErr != nil {
-				fmt.Printf("⚠️  Command not found: %s\n", runner.Command[0])
+				msg := fmt.Sprintf("⚠️  Command not found: %s", runner.Command[0])
+				fmt.Println(msg)
+				summary.Failures = append(summary.Failures, msg)
 				return nil
 			}
 
 			fullCmd := append([]string{cmdPath}, runner.Command[1:]...)
-			if verbose {
-				fmt.Printf("   🔸 %s: %s\n",
-					map[bool]string{true: "Dry-run", false: "Executing"}[dryRun],
-					strings.Join(fullCmd, " "),
-				)
-			} else {
-				fmt.Printf("   🔸 %s: %s ...\n",
-					map[bool]string{true: "Dry-run", false: "Executing"}[dryRun],
-					fullCmd[0],
-				)
+			if verbose || dryRun {
+				fmt.Printf("   🔸 %s: %s\n", map[bool]string{true: "Dry-run", false: "Executing"}[dryRun], strings.Join(fullCmd, " "))
 			}
 
-			if !dryRun {
-				cmd := exec.Command(cmdPath, runner.Command[1:]...)
+			if dryRun {
+				summary.Skipped = append(summary.Skipped, fmt.Sprintf("Dry-run: %s", dir))
+			} else {
+				cmd := exec.Command(fullCmd[0], fullCmd[1:]...)
 				cmd.Dir = dir
 				cmd.Stdout = os.Stdout
 				cmd.Stderr = os.Stderr
 				if err := cmd.Run(); err != nil {
-					fmt.Printf("❌ Error running %s: %v\n", runner.Name, err)
+					msg := fmt.Sprintf("❌ Error installing deps in %s: %v", dir, err)
+					fmt.Println(msg)
+					summary.Failures = append(summary.Failures, msg)
+				} else {
+					summary.Successes = append(summary.Successes, fmt.Sprintf("✅ Installed: %s", runner.Name))
 				}
 			}
-			fmt.Println()
+
 			visitedDirs[dir] = true
 		}
 
@@ -162,4 +199,33 @@ func scanAndInstallDependencies(dryRun, verbose bool, only string) {
 	if err != nil {
 		log.Fatalf("❌ Scan failed: %v", err)
 	}
+
+	// ✅ Print Summary
+	fmt.Println("\n🔚 Install Summary:")
+	fmt.Println("---------------------------")
+
+	if len(summary.Successes) > 0 {
+		fmt.Println("✅ Successes:")
+		for _, msg := range summary.Successes {
+			fmt.Println("   -", msg)
+		}
+	}
+
+	if len(summary.Skipped) > 0 {
+		fmt.Println("\n🚫 Skipped (dry-run):")
+		for _, msg := range summary.Skipped {
+			fmt.Println("   -", msg)
+		}
+	}
+
+	if len(summary.Failures) > 0 {
+		fmt.Println("\n❌ Failures:")
+		for _, msg := range summary.Failures {
+			fmt.Println("   -", msg)
+		}
+	} else {
+		fmt.Println("\n🎉 No errors encountered.")
+	}
+
+	fmt.Println()
 }
