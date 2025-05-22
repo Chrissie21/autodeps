@@ -72,18 +72,56 @@ func scanAndInstallDependencies(dryRun, verbose bool, only string) {
 		}
 	}
 
+	visitedDirs := map[string]bool{} // Avoid duplicate installs per folder
+
 	err = filepath.Walk(cwd, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
+		if err != nil || info == nil {
 			return err
 		}
 
-		if runner, ok := runners[info.Name()]; ok {
-			if only != "" && !filter[runner.Type] {
-				return nil // skip types not included
-			}
+		dir := filepath.Dir(path)
+		file := info.Name()
 
-			dir := filepath.Dir(path)
-			fmt.Printf("📁 Found: %s in %s\n", info.Name(), dir)
+		// Only run once per directory
+		if visitedDirs[dir] {
+			return nil
+		}
+
+		// Check for .venv + requirements.txt combo
+		venvPath := filepath.Join(dir, ".venv")
+		reqsPath := filepath.Join(dir, "requirements.txt")
+		if _, venvExists := os.Stat(venvPath); !os.IsNotExist(venvExists) {
+			if _, reqExists := os.Stat(reqsPath); !os.IsNotExist(reqExists) {
+				if only == "" || filter["pip"] {
+					fmt.Printf("📁 Found: .venv and requirements.txt in %s\n", dir)
+					fmt.Println("🐍 Python (.venv) → Virtual Env Detected")
+
+					script := fmt.Sprintf("source %s/bin/activate && pip install -r requirements.txt", filepath.Join(dir, ".venv"))
+					fmt.Printf("   🔸 %s: %s\n\n",
+						map[bool]string{true: "Dry-run", false: "Executing"}[dryRun],
+						script)
+
+					if !dryRun {
+						cmd := exec.Command("bash", "-c", script)
+						cmd.Dir = dir
+						cmd.Stdout = os.Stdout
+						cmd.Stderr = os.Stderr
+						if err := cmd.Run(); err != nil {
+							fmt.Printf("❌ Error installing in .venv: %v\n", err)
+						}
+					}
+					visitedDirs[dir] = true
+					return nil
+				}
+			}
+		}
+
+		// Default file-based runners
+		if runner, ok := runners[file]; ok {
+			if only != "" && !filter[runner.Type] {
+				return nil
+			}
+			fmt.Printf("📁 Found: %s in %s\n", file, dir)
 			fmt.Printf("🔧 %s → %s\n", runner.Name, dir)
 
 			cmdPath, pathErr := exec.LookPath(runner.Command[0])
@@ -93,10 +131,17 @@ func scanAndInstallDependencies(dryRun, verbose bool, only string) {
 			}
 
 			fullCmd := append([]string{cmdPath}, runner.Command[1:]...)
-			fmt.Printf("   🔸 %s: %v\n",
-				map[bool]string{true: "Dry-run", false: "Executing"}[dryRun],
-				strings.Join(fullCmd, " "),
-			)
+			if verbose {
+				fmt.Printf("   🔸 %s: %s\n",
+					map[bool]string{true: "Dry-run", false: "Executing"}[dryRun],
+					strings.Join(fullCmd, " "),
+				)
+			} else {
+				fmt.Printf("   🔸 %s: %s ...\n",
+					map[bool]string{true: "Dry-run", false: "Executing"}[dryRun],
+					fullCmd[0],
+				)
+			}
 
 			if !dryRun {
 				cmd := exec.Command(cmdPath, runner.Command[1:]...)
@@ -108,7 +153,9 @@ func scanAndInstallDependencies(dryRun, verbose bool, only string) {
 				}
 			}
 			fmt.Println()
+			visitedDirs[dir] = true
 		}
+
 		return nil
 	})
 
