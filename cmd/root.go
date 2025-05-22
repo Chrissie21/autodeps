@@ -2,34 +2,29 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/spf13/cobra"
 )
 
-var scan bool
+var (
+	scan   bool
+	dryRun bool
+)
 
 var rootCmd = &cobra.Command{
 	Use:   "autodeps",
-	Short: "Auto-install project dependencies",
-	Long:  `Scan and install dependencies for Python, Node, and Go projects.`,
+	Short: "🔧 autodeps automatically installs project dependencies",
 	Run: func(cmd *cobra.Command, args []string) {
 		if scan {
-			fmt.Println("🔍 Scanning for project files...")
-			scanAndInstallDependencies()
+			runScanner(dryRun)
 		} else {
-			fmt.Println("ℹ️ Use --help to explore available flags.")
+			fmt.Println("Use --scan to scan and install project dependencies.")
 		}
 	},
 }
 
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
-		fmt.Println("❌ Error:", err)
-		os.Exit(1)
-	}
-}
-
-func init() {
-	rootCmd.PersistentFlags().BoolVarP(&scan, "scan", "s", false, "Scan project directories for dependencies")
+	rootCmd.PersistentFlags().BoolVar(&scan, "scan", false, "Scan for project dependency files and install them")
+	rootCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "Simulate the commands without running them")
+	rootCmd.Execute()
 }

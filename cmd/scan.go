@@ -7,40 +7,31 @@ import (
 	"path/filepath"
 )
 
-func scanAndInstallDependencies() {
-	patterns := map[string]func(string){
-		"go.mod": func(dir string) {
-			fmt.Println("🐹 Downloading Go deps in", dir)
-			cmd := exec.Command("go", "mod", "download")
-			cmd.Dir = dir
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			err := cmd.Run()
-			if err != nil {
-				fmt.Println("❌ Go deps failed in", dir, ":", err)
-			}
+func runScanner(dryRun bool) {
+	fmt.Println("🔍 Scanning for dependency files...\n")
+
+	patterns := map[string]func(string, bool){
+		"go.mod": func(dir string, dry bool) {
+			runCmd("🐹 Go", dir, "go", []string{"mod", "download"}, dry)
 		},
-		"package.json": func(dir string) {
-			fmt.Println("📦 Installing NPM packages in", dir)
-			cmd := exec.Command("npm", "install")
-			cmd.Dir = dir
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			err := cmd.Run()
-			if err != nil {
-				fmt.Println("❌ NPM install failed in", dir, ":", err)
-			}
+		"package.json": func(dir string, dry bool) {
+			runCmd("📦 NPM", dir, "npm", []string{"install"}, dry)
 		},
-		"requirements.txt": func(dir string) {
-			fmt.Println("🐍 Installing Python packages in", dir)
-			cmd := exec.Command("pip", "install", "-r", "requirements.txt")
-			cmd.Dir = dir
-			cmd.Stdout = os.Stdout
-			cmd.Stderr = os.Stderr
-			err := cmd.Run()
-			if err != nil {
-				fmt.Println("❌ Python install failed in", dir, ":", err)
-			}
+		"pnpm-lock.yaml": func(dir string, dry bool) {
+			runCmd("⚡ PNPM", dir, "pnpm", []string{"install"}, dry)
+		},
+		"yarn.lock": func(dir string, dry bool) {
+			runCmd("🧶 Yarn", dir, "yarn", []string{"install"}, dry)
+		},
+		"requirements.txt": func(dir string, dry bool) {
+			runCmd("🐍 Python (pip)", dir, "pip", []string{"install", "-r", "requirements.txt"}, dry)
+		},
+		"Pipfile": func(dir string, dry bool) {
+			runCmd("📘 Pipenv", dir, "pipenv", []string{"install"}, dry)
+		},
+		".venv": func(dir string, dry bool) {
+			fmt.Printf("🐍 Found .venv in %s\n", dir)
+			// No command for .venv alone, it's an env manager
 		},
 	}
 
@@ -50,6 +41,8 @@ func scanAndInstallDependencies() {
 		return
 	}
 
+	seen := map[string]bool{}
+
 	err = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			fmt.Println("⚠️ Walk error:", err)
@@ -57,12 +50,13 @@ func scanAndInstallDependencies() {
 		}
 
 		if !info.IsDir() {
-			for filename, handler := range patterns {
-				if filepath.Base(path) == filename {
-					dir := filepath.Dir(path) // ✅ FIXED: get the correct directory
-					fmt.Println("📁 Found:", filename)
-					handler(dir)
-				}
+			name := filepath.Base(path)
+			handler, ok := patterns[name]
+			if ok && !seen[path] {
+				dir := filepath.Dir(path)
+				fmt.Printf("📁 Found: %s in %s\n", name, dir)
+				handler(dir, dryRun)
+				seen[path] = true
 			}
 		}
 		return nil
@@ -71,4 +65,22 @@ func scanAndInstallDependencies() {
 	if err != nil {
 		fmt.Println("❌ Walk failed:", err)
 	}
+}
+
+func runCmd(label, dir, command string, args []string, dry bool) {
+	fmt.Printf("%s → %s\n", label, dir)
+	if dry {
+		fmt.Printf("   🔸 Dry-run: %s %v\n\n", command, args)
+		return
+	}
+
+	cmd := exec.Command(command, args...)
+	cmd.Dir = dir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	err := cmd.Run()
+	if err != nil {
+		fmt.Printf("   ❌ Error: %v\n", err)
+	}
+	fmt.Println()
 }
