@@ -1,3 +1,147 @@
-# autodeps
+# autodeps 🚀
 
-A brief description of what this project does and who it's for.
+A CLI tool that scans your project directory for Python, Go, and Node.js dependencies and installs them automatically.
+
+[![Go](https://img.shields.io/badge/go-%2300ADD8.svg?style=for-the-badge&logo=go&logoColor=white)](https://golang.org)
+[![Cobra](https://img.shields.io/badge/cobra-FF0000.svg?style=for-the-badge&logo=cobra&logoColor=white)](https://github.com/spf13/cobra)
+
+## Table of Contents 📜
+
+- [About](#about-the-project)
+- [Features](#features-✨)
+- [Tech Stack](#tech-stack-💻)
+- [Installation](#installation-📦)
+- [Usage](#usage-💡)
+- [Project Structure](#project-structure-📁)
+- [Contributing](#contributing-🤝)
+- [License](#license-⚖️)
+- [Footer](#footer-❤️)
+
+## About The Project 🌟
+
+The `autodeps` CLI tool is designed to streamline the dependency management process for projects involving Python, Go, and Node.js. It intelligently scans your project directory for dependency definition files (like `requirements.txt`, `go.mod`, `package.json`, etc.) and automates the installation of these dependencies, saving you time and effort.
+
+## Features ✨
+
+- 🔍 **Dependency Scanning**: Automatically detects dependency files for various ecosystems (Python/pip, Go, Node.js/npm/yarn/pnpm).
+- 📦 **Automatic Installation**: Installs detected dependencies using the appropriate package managers.
+- 🐍 **Python Virtual Environment Support**: Creates a `.venv` if it doesn't exist and uses it for `pip` installations.
+- 🏎️ **Multiple Package Manager Support**: Handles `pip`, `go mod`, `npm`, `yarn`, and `pnpm`.
+- 🚫 **Dry Run Mode**: Allows you to see what actions would be taken without actually performing them (`--dry-run`).
+- 🔊 **Verbose Output**: Provides detailed information about the commands being executed (`--verbose`).
+- 🎯 **Selective Installation**: Option to install dependencies for specific package types only (`--only` flag).
+
+## Tech Stack 💻
+
+- **Primary Language**: Go
+- **Frameworks/Libraries**: [Cobra](https://github.com/spf13/cobra) for CLI building.
+- **Dependency Management**: Utilizes system package managers like `pip`, `go`, `npm`, `yarn`, `pnpm`.
+
+## Installation 📦
+
+To install `autodeps`, you need to have Go installed on your system. 
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/Chrissie21/autodeps.git
+   cd autodeps
+   ```
+
+2. **Build the executable**:
+   ```bash
+   go build -o autodeps .
+   ```
+
+3. **(Optional) Move to PATH**:
+   To run `autodeps` from any directory, move the executable to a directory in your system's PATH:
+   ```bash
+   sudo mv autodeps /usr/local/bin/
+   ```
+
+## Usage 💡
+
+The `autodeps` tool is a command-line interface that operates from your project's root directory.
+
+**Basic Scan and Install**:
+
+To scan the current directory and install all detected dependencies:
+
+```bash
+autodeps --scan
+```
+
+**Dry Run**:
+
+To see what `autodeps` would do without making any changes:
+
+```bash
+autodeps --scan --dry-run
+```
+
+**Verbose Output**:
+
+To get detailed output of the commands being executed:
+
+```bash
+autodeps --scan --verbose
+```
+
+**Install Specific Dependency Types**:
+
+To install only Go and Python dependencies:
+
+```bash
+autodeps --scan --only go,pip
+```
+
+Supported types for `--only`: `go`, `pip`, `npm`, `yarn`, `pnpm`, `pipenv`, `conda`.
+
+### How to use
+
+1. Navigate to the root directory of your project.
+2. Run `autodeps --scan` to detect and install dependencies.
+3. For complex scenarios, use flags like `--dry-run`, `--verbose`, or `--only`.
+
+**Example Use Case**: Imagine you've cloned a new project that uses Python, Go, and Node.js dependencies. Instead of manually running `pip install -r requirements.txt`, `go mod tidy`, and `npm install`, you can simply run `autodeps --scan` from the project root to handle all of them in one go.
+
+## Project Structure 📁
+
+```
+autodeps/
+├── cmd/
+│   └── root.go       # Main CLI command logic and flag definitions
+├── internal/
+│   └── scan/
+│       └── scan.go   # Dependency scanning and installation logic
+├── go.mod            # Go module definition
+├── go.sum            # Go module checksums
+├── main.go           # Entry point for the CLI application
+└── README.md         # This README file
+```
+
+## Contributing 🤝
+
+Contributions are welcome! Please feel free to:
+
+- Fork the repository.
+- Create a new branch (`git checkout -b feature/AmazingFeature`).
+- Make your changes.
+- Commit your changes (`git commit -m 'Add some AmazingFeature'`).
+- Push to the branch (`git push origin feature/AmazingFeature`).
+- Open a Pull Request.
+
+Please ensure your code adheres to the existing style and includes tests where appropriate.
+
+## License ⚖️
+
+This project is **not explicitly licensed**. Please refer to the `LICENSE` file for more details (currently empty).
+
+## Footer ❤️
+
+This project was created by [Chrissie21](https://github.com/Chrissie21). 
+
+If you found this project helpful, please consider giving it a star ⭐, forking it 🍴, or opening an issue 🚩 if you encounter any problems!
+
+
+---
+**<p align="center">Generated by [ReadmeCodeGen](https://www.readmecodegen.com/)</p>**
